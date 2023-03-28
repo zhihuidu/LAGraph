@@ -53,6 +53,14 @@ int LG_CC_FastSV6           // SuiteSparse:GraphBLAS method, with GxB extensions
     LAGraph_Graph G,        // input graph (modified then restored)
     char *msg
 ) ;
+int LG_CC_Contour           // SuiteSparse:GraphBLAS method, with GxB extensions
+(
+    // output:
+    GrB_Vector *component,  // output: array of component identifiers
+    // input:
+    LAGraph_Graph G,        // input graph (modified then restored)
+    char *msg
+) ;
 
 int LG_CC_Boruvka
 (

@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// LG_CC_FastSV6: connected components
+// Contour: connected components
 //------------------------------------------------------------------------------
 
 // LAGraph, (c) 2019-2022 by The LAGraph Contributors, All Rights Reserved.
@@ -53,10 +53,10 @@
 #if LAGRAPH_SUITESPARSE
 
 //==============================================================================
-// fastsv: find the components of a graph
+// Contour: find the components of a graph
 //==============================================================================
 
-static inline GrB_Info fastsv
+static inline GrB_Info Contour
 (
     GrB_Matrix A,           // adjacency matrix, G->A or a subset of G->A
     GrB_Vector parent,      // parent vector
@@ -91,7 +91,64 @@ static inline GrB_Info fastsv
         // mngp = min (mngp, A*gp) using the MIN_SECOND semiring
         GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp, NULL)) ;
         GRB_TRY (GrB_eWiseAdd (*gp_new, NULL, min, min, mngp, *gp, NULL)) ;
-        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, parent, *gp_new, NULL)) ;
+        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, mngp, *gp, NULL)) ;
+
+
+
+        //----------------------------------------------------------------------
+        // parent = min (parent, C*mngp) where C(i,j) is present if i=Px(j)
+        //----------------------------------------------------------------------
+
+        // Reduce_assign: The Px array of size n is the non-opaque copy of the
+        // parent vector, where i = Px [j] if the parent of node j is node i.
+        // It can thus have duplicates.  The vectors parent and mngp are full
+        // (all entries present).  This function computes the following, which
+        // is done explicitly in the Reduce_assign function in LG_CC_Boruvka:
+        //
+        //      for (j = 0 ; j < n ; j++)
+        //      {
+        //          uint64_t i = Px [j] ;
+        //          parent [i] = min (parent [i], mngp [j]) ;
+        //      }
+        //
+        // If C(i,j) is present where i == Px [j], then this can be written as:
+        //
+        //      parent = min (parent, C*mngp)
+        //
+        // when using the min_2nd semiring.  This can be done efficiently
+        // because C can be constructed in O(1) time and O(1) additional space
+        // (not counting the prior Cp, Px, and Cx arrays), when using the
+        // SuiteSparse pack/unpack move constructors.  The min_2nd semiring
+        // ignores the values of C and operates only on the structure, so its
+        // values are not relevant.  Cx is thus chosen as a GrB_BOOL array of
+        // size 1 where Cx [0] = false, so the all entries present in C are
+        // equal to false.
+
+        // pack Cp, Px, and Cx into a matrix C with C(i,j) present if Px(j) == i
+        //GRB_TRY (GxB_Matrix_pack_CSC (C, Cp, /* Px is Ci: */ Px, Cx,
+        //    Cp_size, Ci_size, Cx_size, iso, jumbled, NULL)) ;
+
+        // parent = min (parent, C*mngp) using the MIN_SECOND semiring
+        //GRB_TRY (GrB_mxv (parent, NULL, min, min_2nd, C, mngp, NULL)) ;
+
+        // unpack the contents of C, to make Px available to this method again.
+        //GRB_TRY (GxB_Matrix_unpack_CSC (C, Cp, Px, Cx,
+        //    &Cp_size, &Ci_size, &Cx_size, &iso, &jumbled, NULL)) ;
+
+        //----------------------------------------------------------------------
+        // parent = min (parent, mngp, gp)
+        //----------------------------------------------------------------------
+
+        //GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, mngp, *gp, NULL)) ;
+
+        //----------------------------------------------------------------------
+        // calculate grandparent: gp_new = parent (parent), and extract Px
+        //----------------------------------------------------------------------
+
+        // if parent is uint32, GraphBLAS typecasts to uint64 for Px.
+        //GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
+        //GRB_TRY (GrB_extract (*gp_new, NULL, NULL, parent, *Px, n, NULL)) ;
+
         //----------------------------------------------------------------------
         // terminate if gp and gp_new are the same
         //----------------------------------------------------------------------
@@ -146,7 +203,7 @@ static inline GrB_Info fastsv
 
 #endif
 
-int LG_CC_FastSV6           // SuiteSparse:GraphBLAS method, with GxB extensions
+int LG_CC_Contour           // SuiteSparse:GraphBLAS method, with GxB extensions
 (
     // output:
     GrB_Vector *component,  // component(i)=r if node is in the component r
@@ -420,7 +477,7 @@ int LG_CC_FastSV6           // SuiteSparse:GraphBLAS method, with GxB extensions
         // find the connected components of T
         //----------------------------------------------------------------------
 
-        GRB_TRY (fastsv (T, parent, mngp, &gp, &gp_new, t, eq, min, min_2nd,
+        GRB_TRY (Contour (T, parent, mngp, &gp, &gp_new, t, eq, min, min_2nd,
             C, &Cp, &Px, &Cx, msg)) ;
 
         //----------------------------------------------------------------------
@@ -600,7 +657,7 @@ int LG_CC_FastSV6           // SuiteSparse:GraphBLAS method, with GxB extensions
     // final phase
     //--------------------------------------------------------------------------
 
-    GRB_TRY (fastsv (A, parent, mngp, &gp, &gp_new, t, eq, min, min_2nd,
+    GRB_TRY (Contour (A, parent, mngp, &gp, &gp_new, t, eq, min, min_2nd,
         C, &Cp, &Px, &Cx, msg)) ;
 
     //--------------------------------------------------------------------------
