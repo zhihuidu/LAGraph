@@ -32,14 +32,17 @@ GrB_Matrix A = NULL ;
 
 typedef struct
 {
-    uint32_t ncomponents ;
+    //uint32_t ncomponents ;
+    uint64_t ncomponents ;
     const char *name ;
 }
 matrix_info ;
 
 const matrix_info files [ ] =
 {
-    {      1, "karate.mtx" },
+    //{      2962202, "uk-2002.mtx" },
+    {        1,       "delaunay_n20.mtx"},
+    //{      1, "karate.mtx" },
     {      1, "A.mtx" },
     {      1, "jagmesh7.mtx" },
     {      1, "ldbc-cdlp-undirected-example.mtx" },
@@ -80,7 +83,7 @@ int count_connected_components (GrB_Vector C)
 
 void test_cc_matrices (void)
 {
-
+    double ttt;
     OK (LAGraph_Init (msg)) ;
 
     for (int k = 0 ; ; k++)
@@ -109,7 +112,11 @@ void test_cc_matrices (void)
         {
             // find the connected components
             printf ("\n--- CC: FastSV6 if SuiteSparse, Boruvka if vanilla:\n") ;
+            ttt = LAGraph_WallClockTime ( ) - ttt ;
             OK (LAGr_ConnectedComponents (&C, G, msg)) ;
+            ttt = LAGraph_WallClockTime ( ) - ttt ;
+            printf ("my LG_check_cc component time: %g sec\n", ttt) ;
+
             OK (LAGraph_Vector_Print (C, 2, stdout, msg)) ;
 
             // count the # of connected components
@@ -128,6 +135,7 @@ void test_cc_matrices (void)
             printf ("\n------ CC_FastSV5:\n") ;
             OK (LG_CC_FastSV5 (&C2, G, msg)) ;
             ncomponents = count_connected_components (C2) ;
+            printf ("# components: %6u Matrix: %s\n", ncomponents, aname) ;
             TEST_CHECK (ncomponents == ncomp) ;
             OK (LG_check_cc (C2, G, msg)) ;
             OK (GrB_free (&C2)) ;
@@ -137,6 +145,7 @@ void test_cc_matrices (void)
             printf ("\n------ CC_BORUVKA:\n") ;
             OK (LG_CC_Boruvka (&C2, G, msg)) ;
             ncomponents = count_connected_components (C2) ;
+            printf ("# components: %6u Matrix: %s\n", ncomponents, aname) ;
             TEST_CHECK (ncomponents == ncomp) ;
             OK (LG_check_cc (C2, G, msg)) ;
             OK (GrB_free (&C2)) ;
@@ -152,6 +161,7 @@ void test_cc_matrices (void)
                     printf ("\n------ CC_LACC:\n") ;
                     OK (LAGraph_cc_lacc (&C2, G->A, sanitize, msg)) ;
                     ncomponents = count_connected_components (C2) ;
+                    printf ("# components: %6u Matrix: %s\n", ncomponents, aname) ;
                     TEST_CHECK (ncomponents == ncomp) ;
                     OK (LG_check_cc (C2, G, msg)) ;
                     OK (GrB_free (&C2)) ;
@@ -181,12 +191,17 @@ void test_cc_errors (void)
 {
     OK (LAGraph_Init (msg)) ;
     printf ("\n") ;
+    double ttt;
 
     // check for null pointers
     int result = LG_CC_Boruvka (NULL, NULL, msg) ;
     TEST_CHECK (result == GrB_NULL_POINTER) ;
     #if LAGRAPH_SUITESPARSE
+    ttt = LAGraph_WallClockTime ( ) ;
     result = LG_CC_FastSV6 (NULL, NULL, msg) ;
+    ttt = LAGraph_WallClockTime ( ) - ttt ;
+    printf ("my LG_check_cc component time: %g sec\n", ttt) ;
+
     TEST_CHECK (result == GrB_NULL_POINTER) ;
     #endif
 
@@ -204,7 +219,10 @@ void test_cc_errors (void)
     TEST_CHECK (result == -1001) ;
     printf ("result expected: %d msg:\n%s\n", result, msg) ;
     #if LAGRAPH_SUITESPARSE
+    ttt = LAGraph_WallClockTime ( );
     result = LG_CC_FastSV6 (&C, G, msg) ;
+    ttt = LAGraph_WallClockTime ( ) - ttt ;
+    printf ("my LG_check_cc component time: %g sec\n", ttt) ;
     TEST_CHECK (result == -1001) ;
     printf ("result expected: %d msg:\n%s\n", result, msg) ;
     #endif

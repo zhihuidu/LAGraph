@@ -81,6 +81,7 @@ static inline GrB_Info fastsv
     GrB_Index Cx_size = sizeof (bool) ;
     bool iso = true, jumbled = false, done = false ;
 
+    uint64_t count=0;
     while (true)
     {
 
@@ -90,19 +91,74 @@ static inline GrB_Info fastsv
 
         // mngp = min (mngp, A*gp) using the MIN_SECOND semiring
         GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp, NULL)) ;
-        GRB_TRY (GrB_eWiseAdd (*gp_new, NULL, min, min, mngp, *gp, NULL)) ;
-        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, parent, *gp_new, NULL)) ;
+
+        //----------------------------------------------------------------------
+        // parent = min (parent, C*mngp) where C(i,j) is present if i=Px(j)
+        //----------------------------------------------------------------------
+
+        // Reduce_assign: The Px array of size n is the non-opaque copy of the
+        // parent vector, where i = Px [j] if the parent of node j is node i.
+        // It can thus have duplicates.  The vectors parent and mngp are full
+        // (all entries present).  This function computes the following, which
+        // is done explicitly in the Reduce_assign function in LG_CC_Boruvka:
+        //
+        //      for (j = 0 ; j < n ; j++)
+        //      {
+        //          uint64_t i = Px [j] ;
+        //          parent [i] = min (parent [i], mngp [j]) ;
+        //      }
+        //
+        // If C(i,j) is present where i == Px [j], then this can be written as:
+        //
+        //      parent = min (parent, C*mngp)
+        //
+        // when using the min_2nd semiring.  This can be done efficiently
+        // because C can be constructed in O(1) time and O(1) additional space
+        // (not counting the prior Cp, Px, and Cx arrays), when using the
+        // SuiteSparse pack/unpack move constructors.  The min_2nd semiring
+        // ignores the values of C and operates only on the structure, so its
+        // values are not relevant.  Cx is thus chosen as a GrB_BOOL array of
+        // size 1 where Cx [0] = false, so the all entries present in C are
+        // equal to false.
+
+        // pack Cp, Px, and Cx into a matrix C with C(i,j) present if Px(j) == i
+        GRB_TRY (GxB_Matrix_pack_CSC (C, Cp, /* Px is Ci: */ Px, Cx,
+            Cp_size, Ci_size, Cx_size, iso, jumbled, NULL)) ;
+
+        // parent = min (parent, C*mngp) using the MIN_SECOND semiring
+        GRB_TRY (GrB_mxv (parent, NULL, min, min_2nd, C, mngp, NULL)) ;
+
+        // unpack the contents of C, to make Px available to this method again.
+        GRB_TRY (GxB_Matrix_unpack_CSC (C, Cp, Px, Cx,
+            &Cp_size, &Ci_size, &Cx_size, &iso, &jumbled, NULL)) ;
+
+        //----------------------------------------------------------------------
+        // parent = min (parent, mngp, gp)
+        //----------------------------------------------------------------------
+
+        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, mngp, *gp, NULL)) ;
+
+        //----------------------------------------------------------------------
+        // calculate grandparent: gp_new = parent (parent), and extract Px
+        //----------------------------------------------------------------------
+
+        // if parent is uint32, GraphBLAS typecasts to uint64 for Px.
+        GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
+        GRB_TRY (GrB_extract (*gp_new, NULL, NULL, parent, *Px, n, NULL)) ;
+
         //----------------------------------------------------------------------
         // terminate if gp and gp_new are the same
         //----------------------------------------------------------------------
 
         GRB_TRY (GrB_eWiseMult (t, NULL, NULL, eq, *gp_new, *gp, NULL)) ;
         GRB_TRY (GrB_reduce (&done, NULL, GrB_LAND_MONOID_BOOL, t, NULL)) ;
+        count=count+1;
         if (done) break ;
 
         // swap gp and gp_new
         GrB_Vector s = (*gp) ; (*gp) = (*gp_new) ; (*gp_new) = s ;
     }
+    printf("Total iteration number =%d",count) ;
     return (GrB_SUCCESS) ;
 }
 

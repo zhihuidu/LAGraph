@@ -80,6 +80,8 @@ static inline GrB_Info Contour
     GrB_Index Ci_size = n * sizeof (GrB_Index) ;
     GrB_Index Cx_size = sizeof (bool) ;
     bool iso = true, jumbled = false, done = false ;
+    uint64_t count=0;
+
 
     while (true)
     {
@@ -88,10 +90,10 @@ static inline GrB_Info Contour
         // hooking & shortcutting
         //----------------------------------------------------------------------
 
+        GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
+        GRB_TRY (GrB_extract (*gp_new, NULL, NULL, *gp, *Px, n, NULL)) ;
         // mngp = min (mngp, A*gp) using the MIN_SECOND semiring
-        GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp, NULL)) ;
-        GRB_TRY (GrB_eWiseAdd (*gp_new, NULL, min, min, mngp, *gp, NULL)) ;
-        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, mngp, *gp, NULL)) ;
+        GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp_new, NULL)) ;
 
 
 
@@ -125,41 +127,44 @@ static inline GrB_Info Contour
         // equal to false.
 
         // pack Cp, Px, and Cx into a matrix C with C(i,j) present if Px(j) == i
-        //GRB_TRY (GxB_Matrix_pack_CSC (C, Cp, /* Px is Ci: */ Px, Cx,
-        //    Cp_size, Ci_size, Cx_size, iso, jumbled, NULL)) ;
+        GRB_TRY (GxB_Matrix_pack_CSC (C, Cp, /* Px is Ci: */ Px, Cx,
+            Cp_size, Ci_size, Cx_size, iso, jumbled, NULL)) ;
 
         // parent = min (parent, C*mngp) using the MIN_SECOND semiring
-        //GRB_TRY (GrB_mxv (parent, NULL, min, min_2nd, C, mngp, NULL)) ;
+        GRB_TRY (GrB_mxv (parent, NULL, min, min_2nd, C, mngp, NULL)) ;
+        GRB_TRY (GrB_mxv (*gp, NULL, min, min_2nd, C, mngp, NULL)) ;
 
         // unpack the contents of C, to make Px available to this method again.
-        //GRB_TRY (GxB_Matrix_unpack_CSC (C, Cp, Px, Cx,
-        //    &Cp_size, &Ci_size, &Cx_size, &iso, &jumbled, NULL)) ;
+        GRB_TRY (GxB_Matrix_unpack_CSC (C, Cp, Px, Cx,
+            &Cp_size, &Ci_size, &Cx_size, &iso, &jumbled, NULL)) ;
 
         //----------------------------------------------------------------------
         // parent = min (parent, mngp, gp)
         //----------------------------------------------------------------------
 
-        //GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, mngp, *gp, NULL)) ;
+        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, *gp, *gp_new, NULL)) ;
 
         //----------------------------------------------------------------------
         // calculate grandparent: gp_new = parent (parent), and extract Px
         //----------------------------------------------------------------------
 
         // if parent is uint32, GraphBLAS typecasts to uint64 for Px.
-        //GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
-        //GRB_TRY (GrB_extract (*gp_new, NULL, NULL, parent, *Px, n, NULL)) ;
+        GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
+        GRB_TRY (GrB_extract (*gp_new, NULL, NULL, parent, *Px, n, NULL)) ;
 
         //----------------------------------------------------------------------
         // terminate if gp and gp_new are the same
         //----------------------------------------------------------------------
 
-        GRB_TRY (GrB_eWiseMult (t, NULL, NULL, eq, *gp_new, *gp, NULL)) ;
+        GRB_TRY (GrB_eWiseMult (t, NULL, NULL, eq, *gp_new, parent, NULL)) ;
         GRB_TRY (GrB_reduce (&done, NULL, GrB_LAND_MONOID_BOOL, t, NULL)) ;
+        count=count+1;
         if (done) break ;
 
         // swap gp and gp_new
         GrB_Vector s = (*gp) ; (*gp) = (*gp_new) ; (*gp_new) = s ;
     }
+    printf("Total iteration number= %ld\n",count);
     return (GrB_SUCCESS) ;
 }
 
