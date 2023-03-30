@@ -91,6 +91,7 @@ static inline GrB_Info Contour
         //----------------------------------------------------------------------
 
         GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
+        // ggp=gp[parent]
         GRB_TRY (GrB_extract (*gp_new, NULL, NULL, *gp, *Px, n, NULL)) ;
         // mngp = min (mngp, A*gp) using the MIN_SECOND semiring
         GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp_new, NULL)) ;
@@ -143,6 +144,7 @@ static inline GrB_Info Contour
         //----------------------------------------------------------------------
 
         GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, *gp, *gp_new, NULL)) ;
+        GRB_TRY (GrB_eWiseAdd (*gp, NULL, min, min, *gp_new, parent, NULL)) ;
 
         //----------------------------------------------------------------------
         // calculate grandparent: gp_new = parent (parent), and extract Px

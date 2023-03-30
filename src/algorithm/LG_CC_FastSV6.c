@@ -158,7 +158,7 @@ static inline GrB_Info fastsv
         // swap gp and gp_new
         GrB_Vector s = (*gp) ; (*gp) = (*gp_new) ; (*gp_new) = s ;
     }
-    printf("Total iteration number =%d",count) ;
+    printf("Total iteration number =%ld\n",count) ;
     return (GrB_SUCCESS) ;
 }
 
