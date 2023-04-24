@@ -82,6 +82,9 @@ static inline GrB_Info fastsv
     bool iso = true, jumbled = false, done = false ;
 
     uint64_t count=0;
+    double vt;
+    vt = LAGraph_WallClockTime ( ) ;
+
     while (true)
     {
 
@@ -158,7 +161,9 @@ static inline GrB_Info fastsv
         // swap gp and gp_new
         GrB_Vector s = (*gp) ; (*gp) = (*gp_new) ; (*gp_new) = s ;
     }
-    printf("Total iteration number =%ld\n",count) ;
+    printf("FastSV total iteration number =%ld\n",count) ;
+    vt = LAGraph_WallClockTime ( ) - vt ;
+    printf ("FastSV execution time: %g sec\n", vt) ;
     return (GrB_SUCCESS) ;
 }
 

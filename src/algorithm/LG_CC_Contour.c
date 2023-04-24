@@ -11,7 +11,7 @@
 // funding and support from the U.S. Government (see Acknowledgments.txt file).
 // DM22-0790
 
-// Contributed by Yongzhe Zhang, modified by Timothy A. Davis, Texas A&M
+// Contributed by Zhihui Du, modified by Timothy A. Davis, Texas A&M
 // University
 
 //------------------------------------------------------------------------------
@@ -20,14 +20,7 @@
 // but it is not user-callable (see LAGr_ConnectedComponents instead).
 
 // Code is based on the algorithm described in the following paper:
-// Zhang, Azad, Hu. FastSV: A Distributed-Memory Connected Component
-// Algorithm with Fast Convergence (SIAM PP20)
-
-// A subsequent update to the algorithm is here (which might not be reflected
-// in this code):
-// Yongzhe Zhang, Ariful Azad, Aydin Buluc: Parallel algorithms for finding
-// connected components using linear algebra. J. Parallel Distributed Comput.
-// 144: 14-27 (2020).
+// Du. et al. Contour Algorithm for Connectivity
 
 // Modified by Tim Davis, Texas A&M University: revised Reduce_assign to use
 // purely GrB* and GxB* methods and the matrix C.  Added warmup phase.  Changed
@@ -82,21 +75,24 @@ static inline GrB_Info Contour
     bool iso = true, jumbled = false, done = false ;
     uint64_t count=0;
 
+    double vt;
+    vt = LAGraph_WallClockTime ( ) ;
 
     while (true)
     {
 
-        //----------------------------------------------------------------------
-        // hooking & shortcutting
-        //----------------------------------------------------------------------
+
+
+        GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp, NULL)) ;
+        // mngp is the current vertex's neighbour's grandparent
+        // for edge <u,v> and u as the current vertex, we get the relationship <u, grandparent(v)>
+
+        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, *gp, mngp, NULL)) ;
+        // update parent based on grandparent and neighbor's grandparent
+        // here parent(u)=min(parent(u),grandparent(u),grandparent(v))
 
         GRB_TRY (GrB_Vector_extractTuples (NULL, *Px, &n, parent)) ;
-        // ggp=gp[parent]
-        GRB_TRY (GrB_extract (*gp_new, NULL, NULL, *gp, *Px, n, NULL)) ;
-        // mngp = min (mngp, A*gp) using the MIN_SECOND semiring
-        GRB_TRY (GrB_mxv (mngp, NULL, min, min_2nd, A, *gp_new, NULL)) ;
-
-
+        // Px is the value of parent
 
         //----------------------------------------------------------------------
         // parent = min (parent, C*mngp) where C(i,j) is present if i=Px(j)
@@ -133,18 +129,11 @@ static inline GrB_Info Contour
 
         // parent = min (parent, C*mngp) using the MIN_SECOND semiring
         GRB_TRY (GrB_mxv (parent, NULL, min, min_2nd, C, mngp, NULL)) ;
-        GRB_TRY (GrB_mxv (*gp, NULL, min, min_2nd, C, mngp, NULL)) ;
+        // for edge <u,v>, if w is the parent of u, then let  parent(w)=min(parent(w),grandparent(v))
 
         // unpack the contents of C, to make Px available to this method again.
         GRB_TRY (GxB_Matrix_unpack_CSC (C, Cp, Px, Cx,
             &Cp_size, &Ci_size, &Cx_size, &iso, &jumbled, NULL)) ;
-
-        //----------------------------------------------------------------------
-        // parent = min (parent, mngp, gp)
-        //----------------------------------------------------------------------
-
-        GRB_TRY (GrB_eWiseAdd (parent, NULL, min, min, *gp, *gp_new, NULL)) ;
-        GRB_TRY (GrB_eWiseAdd (*gp, NULL, min, min, *gp_new, parent, NULL)) ;
 
         //----------------------------------------------------------------------
         // calculate grandparent: gp_new = parent (parent), and extract Px
@@ -158,7 +147,7 @@ static inline GrB_Info Contour
         // terminate if gp and gp_new are the same
         //----------------------------------------------------------------------
 
-        GRB_TRY (GrB_eWiseMult (t, NULL, NULL, eq, *gp_new, parent, NULL)) ;
+        GRB_TRY (GrB_eWiseMult (t, NULL, NULL, eq, *gp_new, *gp, NULL)) ;
         GRB_TRY (GrB_reduce (&done, NULL, GrB_LAND_MONOID_BOOL, t, NULL)) ;
         count=count+1;
         if (done) break ;
@@ -166,15 +155,17 @@ static inline GrB_Info Contour
         // swap gp and gp_new
         GrB_Vector s = (*gp) ; (*gp) = (*gp_new) ; (*gp_new) = s ;
     }
-    printf("Total iteration number= %ld\n",count);
+    printf("Contour's  iteration number= %ld\n",count);
+    vt = LAGraph_WallClockTime ( ) - vt ;
+    printf ("Contour's Execution time: %g sec\n", vt) ;
     return (GrB_SUCCESS) ;
 }
 
 //==============================================================================
-// LG_CC_FastSV6
+// LG_CC_Contour
 //==============================================================================
 
-// The output of LG_CC_FastSV* is a vector component, where component(i)=r if
+// The output of LG_CC_Contour is a vector component, where component(i)=r if
 // node i is in the connected compononent whose representative is node r.  If r
 // is a representative, then component(r)=r.  The number of connected
 // components in the graph G is the number of representatives.
